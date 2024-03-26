@@ -1,0 +1,10 @@
+.DS_Store
+.vs/
+.vscode/
+
+CMakeSettings.json
+CMakeUserPresets.json
+
+[Bb]uild/
+[Bb]in/
+[Oo]ut/
