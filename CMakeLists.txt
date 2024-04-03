@@ -16,3 +16,6 @@ pkg_check_modules(HARFBUZZ REQUIRED harfbuzz)
 target_include_directories(TextTest PRIVATE ${HARFBUZZ_INCLUDE_DIRS})
 target_link_directories(TextTest PRIVATE ${HARFBUZZ_LIBRARY_DIRS})
 target_link_libraries(TextTest PRIVATE ${HARFBUZZ_LIBRARIES})
+
+add_subdirectory("third-party")
+target_link_libraries(TextTest PRIVATE ttf2mesh)
