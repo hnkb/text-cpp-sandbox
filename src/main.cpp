@@ -3,12 +3,110 @@
 
 #include <ttf2mesh.h>
 #include <hb.h>
+#include <fstream>
 using namespace std;
 
 extern hb_font_extents_t extents;
 
+
+struct Mesh
+{
+	int startIndex;
+	int indexCount;
+};
+
+template <typename T>
+void writeToFile(const filesystem::path& filename, const vector<T>& data)
+{
+	std::ofstream file(filename, std::ios::binary);
+	file.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(T));
+}
+
+void saveFont(const filesystem::path& filename)
+{
+	ttf_t* ttf = nullptr;
+	ttf_load_from_file(filename.u8string().c_str(), &ttf, false);
+	if (!ttf)
+	{
+		fprintf(stderr, "Error opening font from '%s'\n", filename.u8string().c_str());
+		return;
+	}
+
+	// name = ttf->names.full_name;
+	// family = ttf->names.family;
+
+	// metrics.lineHeight = (ttf->hhea.ascender - ttf->hhea.descender + ttf->hhea.lineGap);
+
+	std::vector<Mesh> meshes;
+	std::vector<float2> vertices;
+	std::vector<uint32_t> indices;
+	meshes.resize(ttf->nglyphs);
+	vertices.reserve(ttf->nglyphs * 125);
+	indices.reserve(ttf->nglyphs * 125 * 3);
+
+	int numErrors = 0;
+
+	for (int glyphIdx = 0; glyphIdx < ttf->nglyphs; glyphIdx++)
+	{
+		auto inputGlyph = &ttf->glyphs[glyphIdx];
+		auto& outputGlyph = meshes[glyphIdx];
+
+		ttf_mesh_t* mesh = nullptr;
+		if (inputGlyph->symbol == ' '
+			|| ttf_glyph2mesh(inputGlyph, &mesh, TTF_QUALITY_HIGH, TTF_FEATURE_IGN_ERR) != TTF_DONE)
+		{
+			outputGlyph.startIndex = 0;
+			outputGlyph.indexCount = 0;
+			numErrors++;
+			continue;
+		}
+
+		const auto startVertex = (uint32_t)vertices.size();
+		outputGlyph.startIndex = (int)indices.size();
+		outputGlyph.indexCount = mesh->nfaces * 3;
+
+		for (int i = 0; i < mesh->nvert; i++)
+			vertices.emplace_back(mesh->vert[i].x, mesh->vert[i].y);
+
+		for (int i = 0; i < mesh->nfaces; i++)
+		{
+			indices.push_back(mesh->faces[i].v1 + startVertex);
+			indices.push_back(mesh->faces[i].v2 + startVertex);
+			indices.push_back(mesh->faces[i].v3 + startVertex);
+		}
+	}
+
+	ttf_free(ttf);
+
+	auto outFile = filename;
+	outFile.replace_extension(".vert");
+	writeToFile(outFile, vertices);
+
+	outFile.replace_extension(".idx");
+	writeToFile(outFile, indices);
+
+	outFile.replace_extension(".mesh");
+	writeToFile(outFile, meshes);
+
+	printf(
+		"Font '%s' loaded into %.2f MB buffer with %zu glyphs, %d errors, %zu vertices, %zu "
+		"indices.\n",
+		filename.stem().c_str(),
+		(vertices.size() * sizeof(vertices[0]) + indices.size() * sizeof(indices[0])) / 1024.
+			/ 1024.,
+		meshes.size(),
+		numErrors,
+		vertices.size(),
+		indices.size());
+}
+
+
 int main()
 {
+	saveFont(
+		"/Users/hani/dev/hani/render-sandbox/client/cpp/assets/fonts/MPLUS1p-Regular.ttf");
+	return 0;
+
 	// const auto text = "grape of\nmother";
 	const auto text = "اگر آن ترک شیرازی دستش را به دل ما برد";
 

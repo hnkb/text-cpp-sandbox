@@ -36,7 +36,13 @@
 /* --------------- System dependent definitions and includes ---------------- */
 
 /* General OS selection definition */
-#if defined(ANDROID)
+#if defined(__APPLE__) && defined(__MACH__)
+#   define TTF_LINUX
+#   define _DARWIN_C_SOURCE
+#   define PATH_SEP '/'
+#   include <limits.h>
+#   include <dirent.h>
+#elif defined(ANDROID)
 #   define TTF_ANDROID
 #   define _DEFAULT_SOURCE 1
 #   define PATH_SEP '/'
@@ -1575,6 +1581,7 @@ static void ttf_prepare_to_output(ttf_t *ttf, pps_t *pps)
     /* convert font metrics to em unit */
     scale = pps->phead->unitsPerEm == 0 ? 0.0f :
         1.0f / big16toh(pps->phead->unitsPerEm);
+	// printf(" -- scale %f\n", 1/scale);
     for (i = 0; i < ttf->nglyphs; i++)
     {
         g = ttf->glyphs + i;

@@ -10,6 +10,7 @@ struct GlyphInfo
 {
 	uint32_t index;
 	float2 pos;
+	float advance;
 
 	GlyphInfo(uint32_t index, float2 pos) : index(index), pos(pos) {}
 };
