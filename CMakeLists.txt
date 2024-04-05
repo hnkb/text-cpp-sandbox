@@ -16,10 +16,10 @@ target_include_directories(TextTest PRIVATE ${HARFBUZZ_INCLUDE_DIRS})
 target_link_directories(TextTest PRIVATE ${HARFBUZZ_LIBRARY_DIRS})
 target_link_libraries(TextTest PRIVATE ${HARFBUZZ_LIBRARIES})
 
-
 find_package(Freetype REQUIRED)
 include_directories(${FREETYPE_INCLUDE_DIRS})
 target_link_libraries(TextTest PRIVATE ${FREETYPE_LIBRARIES})
 
 add_subdirectory("third-party")
-target_link_libraries(TextTest PRIVATE ttf2mesh)
+
+target_link_libraries(TextTest PRIVATE ttf2mesh libtess2)
