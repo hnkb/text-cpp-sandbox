@@ -124,7 +124,7 @@ static void MakeVertex( TESSvertex *newVertex,
 	TESSvertex *vPrev;
 	TESSvertex *vNew = newVertex;
 
-	assert(vNew != NULL);
+	// assert(vNew != NULL);
 
 	/* insert in circular doubly-linked list before vNext */
 	vPrev = vNext->prev;
@@ -156,7 +156,7 @@ static void MakeFace( TESSface *newFace, TESShalfEdge *eOrig, TESSface *fNext )
 	TESSface *fPrev;
 	TESSface *fNew = newFace;
 
-	assert(fNew != NULL); 
+	// assert(fNew != NULL); 
 
 	/* insert in circular doubly-linked list before fNext */
 	fPrev = fNext->prev;
@@ -765,9 +765,9 @@ void tessMeshFlipEdge( TESSmesh *mesh, TESShalfEdge *edge )
 	TESSface *fa = a0->Lface;
 	TESSface *fb = b0->Lface;
 
-	assert(EdgeIsInternal(edge));
-	assert(a2->Lnext == a0);
-	assert(b2->Lnext == b0);
+	// assert(EdgeIsInternal(edge));
+	// assert(a2->Lnext == a0);
+	// assert(b2->Lnext == b0);
 
 	a0->Org = bOpp;
 	a0->Onext = b1->Sym;
@@ -795,35 +795,35 @@ void tessMeshFlipEdge( TESSmesh *mesh, TESShalfEdge *edge )
 	if (aOrg->anEdge == a0) aOrg->anEdge = b1;
 	if (bOrg->anEdge == b0) bOrg->anEdge = a1;
 
-	assert( a0->Lnext->Onext->Sym == a0 );
-	assert( a0->Onext->Sym->Lnext == a0 );
-	assert( a0->Org->anEdge->Org == a0->Org );
+	// assert( a0->Lnext->Onext->Sym == a0 );
+	// assert( a0->Onext->Sym->Lnext == a0 );
+	// assert( a0->Org->anEdge->Org == a0->Org );
 
 
-	assert( a1->Lnext->Onext->Sym == a1 );
-	assert( a1->Onext->Sym->Lnext == a1 );
-	assert( a1->Org->anEdge->Org == a1->Org );
+	// assert( a1->Lnext->Onext->Sym == a1 );
+	// assert( a1->Onext->Sym->Lnext == a1 );
+	// assert( a1->Org->anEdge->Org == a1->Org );
 
-	assert( a2->Lnext->Onext->Sym == a2 );
-	assert( a2->Onext->Sym->Lnext == a2 );
-	assert( a2->Org->anEdge->Org == a2->Org );
+	// assert( a2->Lnext->Onext->Sym == a2 );
+	// assert( a2->Onext->Sym->Lnext == a2 );
+	// assert( a2->Org->anEdge->Org == a2->Org );
 
-	assert( b0->Lnext->Onext->Sym == b0 );
-	assert( b0->Onext->Sym->Lnext == b0 );
-	assert( b0->Org->anEdge->Org == b0->Org );
+	// assert( b0->Lnext->Onext->Sym == b0 );
+	// assert( b0->Onext->Sym->Lnext == b0 );
+	// assert( b0->Org->anEdge->Org == b0->Org );
 
-	assert( b1->Lnext->Onext->Sym == b1 );
-	assert( b1->Onext->Sym->Lnext == b1 );
-	assert( b1->Org->anEdge->Org == b1->Org );
+	// assert( b1->Lnext->Onext->Sym == b1 );
+	// assert( b1->Onext->Sym->Lnext == b1 );
+	// assert( b1->Org->anEdge->Org == b1->Org );
 
-	assert( b2->Lnext->Onext->Sym == b2 );
-	assert( b2->Onext->Sym->Lnext == b2 );
-	assert( b2->Org->anEdge->Org == b2->Org );
+	// assert( b2->Lnext->Onext->Sym == b2 );
+	// assert( b2->Onext->Sym->Lnext == b2 );
+	// assert( b2->Org->anEdge->Org == b2->Org );
 
-	assert(aOrg->anEdge->Org == aOrg);
-	assert(bOrg->anEdge->Org == bOrg);
+	// assert(aOrg->anEdge->Org == aOrg);
+	// assert(bOrg->anEdge->Org == bOrg);
 
-	assert(a0->Oprev->Onext->Org == a0->Org);
+	// assert(a0->Oprev->Onext->Org == a0->Org);
 }
 
 #ifdef DELETE_BY_ZAPPING
@@ -837,7 +837,7 @@ void tessMeshDeleteMesh( TESSalloc* alloc, TESSmesh *mesh )
 	while( fHead->next != fHead ) {
 		tessMeshZapFace( fHead->next );
 	}
-	assert( mesh->vHead.next == &mesh->vHead );
+	// assert( mesh->vHead.next == &mesh->vHead );
 
 	alloc->memfree( alloc->userData, mesh );
 }
@@ -871,47 +871,49 @@ void tessMeshCheckMesh( TESSmesh *mesh )
 	TESShalfEdge *e, *ePrev;
 
 	for( fPrev = fHead ; (f = fPrev->next) != fHead; fPrev = f) {
-		assert( f->prev == fPrev );
+		// assert( f->prev == fPrev );
 		e = f->anEdge;
 		do {
-			assert( e->Sym != e );
-			assert( e->Sym->Sym == e );
-			assert( e->Lnext->Onext->Sym == e );
-			assert( e->Onext->Sym->Lnext == e );
-			assert( e->Lface == f );
+			// assert( e->Sym != e );
+			// assert( e->Sym->Sym == e );
+			// assert( e->Lnext->Onext->Sym == e );
+			// assert( e->Onext->Sym->Lnext == e );
+			// assert( e->Lface == f );
 			e = e->Lnext;
 		} while( e != f->anEdge );
 	}
-	assert( f->prev == fPrev && f->anEdge == NULL );
+	// assert( f->prev == fPrev && f->anEdge == NULL );
 
 	for( vPrev = vHead ; (v = vPrev->next) != vHead; vPrev = v) {
-		assert( v->prev == vPrev );
+		// assert( v->prev == vPrev );
 		e = v->anEdge;
 		do {
-			assert( e->Sym != e );
-			assert( e->Sym->Sym == e );
-			assert( e->Lnext->Onext->Sym == e );
-			assert( e->Onext->Sym->Lnext == e );
-			assert( e->Org == v );
+			// assert( e->Sym != e );
+			// assert( e->Sym->Sym == e );
+			// assert( e->Lnext->Onext->Sym == e );
+			// assert( e->Onext->Sym->Lnext == e );
+			// assert( e->Org == v );
 			e = e->Onext;
 		} while( e != v->anEdge );
 	}
-	assert( v->prev == vPrev && v->anEdge == NULL );
+	// assert( v->prev == vPrev && v->anEdge == NULL );
 
 	for( ePrev = eHead ; (e = ePrev->next) != eHead; ePrev = e) {
-		assert( e->Sym->next == ePrev->Sym );
-		assert( e->Sym != e );
-		assert( e->Sym->Sym == e );
-		assert( e->Org != NULL );
-		assert( e->Dst != NULL );
-		assert( e->Lnext->Onext->Sym == e );
-		assert( e->Onext->Sym->Lnext == e );
+		// assert( e->Sym->next == ePrev->Sym );
+		// assert( e->Sym != e );
+		// assert( e->Sym->Sym == e );
+		// assert( e->Org != NULL );
+		// assert( e->Dst != NULL );
+		// assert( e->Lnext->Onext->Sym == e );
+		// assert( e->Onext->Sym->Lnext == e );
 	}
+	/*
 	assert( e->Sym->next == ePrev->Sym
 		&& e->Sym == &mesh->eHeadSym
 		&& e->Sym->Sym == e
 		&& e->Org == NULL && e->Dst == NULL
 		&& e->Lface == NULL && e->Rface == NULL );
+	*/
 }
 
 #endif

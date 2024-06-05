@@ -1,110 +1,95 @@
-#include "TextLayout.h"
 #include <iostream>
-
-#include <ttf2mesh.h>
-#include <hb.h>
 #include <fstream>
-
 #include <iostream>
+
 #include <ft2build.h>
 #include <freetype/freetype.h>
 #include FT_FREETYPE_H
-#include "tesselator.h"  // Include the libtess2 header
+#include FT_OUTLINE_H
+#include <tesselator.h>
+#include "clipper.hpp"
+
+#include "TextLayout.h"
+#include "Collection.h"
 
 using namespace std;
+using namespace ClipperLib;
 
-extern hb_font_extents_t extents;
+float normalizationMul;
 
+struct ContourWithIndex {
+	FT_UInt index;
+	vector<vector<float2>> subContours;
 
-struct Mesh
-{
-	int startIndex;
-	int indexCount;
+	bool operator==(const ContourWithIndex& rhs) const
+	{
+		return this->index == rhs.index;
+	}
 };
+vector<ContourWithIndex> contours;
 
-template <typename T>
-void writeToFile(const filesystem::path& filename, const vector<T>& data)
-{
-	std::ofstream file(filename, std::ios::binary);
-	file.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(T));
+float2 FT_Vector_to_float2(const FT_Vector* v) {
+	return float2({v->x * normalizationMul, v->y * normalizationMul});
 }
 
-void saveFont(const filesystem::path& filename)
-{
-	ttf_t* ttf = nullptr;
-	ttf_load_from_file(filename.u8string().c_str(), &ttf, false);
-	if (!ttf)
-	{
-		fprintf(stderr, "Error opening font from '%s'\n", filename.u8string().c_str());
-		return;
-	}
+vector<vector<float2>> currentContour;
 
-	// name = ttf->names.full_name;
-	// family = ttf->names.family;
+int moveTo(const FT_Vector* to, void* user) {
+	currentContour.push_back({});
+	currentContour.back() = {FT_Vector_to_float2(to)};
+    return 0; // Return value of 0 indicates success
+}
 
-	// metrics.lineHeight = (ttf->hhea.ascender - ttf->hhea.descender + ttf->hhea.lineGap);
+int lineTo(const FT_Vector* to, void* user) {
+    currentContour.back().push_back(FT_Vector_to_float2(to));
+    return 0;
+}
 
-	std::vector<Mesh> meshes;
-	std::vector<float2> vertices;
-	std::vector<uint32_t> indices;
-	meshes.resize(ttf->nglyphs);
-	vertices.reserve(ttf->nglyphs * 125);
-	indices.reserve(ttf->nglyphs * 125 * 3);
+// Evaluate a cubic Bezier at a given t
+float2 cubicBezier(const float2& P0, const float2& P1, const float2& P2, const float2& P3, double t) {
+    double x = pow(1 - t, 3) * P0.x + 3 * pow(1 - t, 2) * t * P1.x + 3 * (1 - t) * pow(t, 2) * P2.x + pow(t, 3) * P3.x;
+    double y = pow(1 - t, 3) * P0.y + 3 * pow(1 - t, 2) * t * P1.y + 3 * (1 - t) * pow(t, 2) * P2.y + pow(t, 3) * P3.y;
+    return float2({(float)x, (float)y});
+}
 
-	int numErrors = 0;
+// Simple function to approximate a cubic Bezier curve with line segments
+int cubicTo(const FT_Vector* control1, const FT_Vector* control2, const FT_Vector* to, void* user) {
+    float2 P0 = currentContour.back().back();  // Last point added is the start of this curve
+    float2 P1 = FT_Vector_to_float2(control1);
+    float2 P2 = FT_Vector_to_float2(control2);
+    float2 P3 = FT_Vector_to_float2(to);
 
-	for (int glyphIdx = 0; glyphIdx < ttf->nglyphs; glyphIdx++)
-	{
-		auto inputGlyph = &ttf->glyphs[glyphIdx];
-		auto& outputGlyph = meshes[glyphIdx];
+    int segments = 20; // This can be adjusted based on desired precision
+    for (int i = 1; i <= segments; ++i) {
+        double t = i / double(segments);
+        float2 pt = cubicBezier(P0, P1, P2, P3, t);
+        currentContour.back().push_back(pt);
+    }
 
-		ttf_mesh_t* mesh = nullptr;
-		if (inputGlyph->symbol == ' '
-			|| ttf_glyph2mesh(inputGlyph, &mesh, TTF_QUALITY_HIGH, TTF_FEATURE_IGN_ERR) != TTF_DONE)
-		{
-			outputGlyph.startIndex = 0;
-			outputGlyph.indexCount = 0;
-			numErrors++;
-			continue;
-		}
+    return 0;
+}
 
-		const auto startVertex = (uint32_t)vertices.size();
-		outputGlyph.startIndex = (int)indices.size();
-		outputGlyph.indexCount = mesh->nfaces * 3;
+// Evaluate a quadratic Bezier curve at a given t
+float2 quadraticBezier(const float2& P0, const float2& P1, const float2& P2, double t) {
+    double x = (1 - t) * (1 - t) * P0.x + 2 * (1 - t) * t * P1.x + t * t * P2.x;
+    double y = (1 - t) * (1 - t) * P0.y + 2 * (1 - t) * t * P1.y + t * t * P2.y;
+    return float2({(float)x, (float)y});
+}
 
-		for (int i = 0; i < mesh->nvert; i++)
-			vertices.emplace_back(mesh->vert[i].x, mesh->vert[i].y);
+// Function to flatten a quadratic Bezier curve using line segments
+int conicTo(const FT_Vector* control, const FT_Vector* to, void* user) {
+    float2 P0 = currentContour.back().back();  // Start point is the last point added
+    float2 P1 = FT_Vector_to_float2(control); // Control point
+    float2 P2 = FT_Vector_to_float2(to); // End point
 
-		for (int i = 0; i < mesh->nfaces; i++)
-		{
-			indices.push_back(mesh->faces[i].v1 + startVertex);
-			indices.push_back(mesh->faces[i].v2 + startVertex);
-			indices.push_back(mesh->faces[i].v3 + startVertex);
-		}
-	}
+    const int segments = 20;  // Number of line segments to approximate the Bezier curve
+    for (int i = 1; i <= segments; ++i) {
+        double t = i / double(segments);
+        float2 pt = quadraticBezier(P0, P1, P2, t);
+        currentContour.back().push_back(pt);
+    }
 
-	ttf_free(ttf);
-
-	auto outFile = filename;
-	outFile.replace_extension(".vert");
-	writeToFile(outFile, vertices);
-
-	outFile.replace_extension(".idx");
-	writeToFile(outFile, indices);
-
-	outFile.replace_extension(".mesh");
-	writeToFile(outFile, meshes);
-
-	printf(
-		"Font '%s' loaded into %.2f MB buffer with %zu glyphs, %d errors, %zu vertices, %zu "
-		"indices.\n",
-		filename.stem().c_str(),
-		(vertices.size() * sizeof(vertices[0]) + indices.size() * sizeof(indices[0])) / 1024.
-			/ 1024.,
-		meshes.size(),
-		numErrors,
-		vertices.size(),
-		indices.size());
+    return 0;  // Return 0 to indicate success
 }
 
 int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename) {
@@ -114,198 +99,93 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename) {
     // Initialize the FreeType library
     FT_Error error = FT_Init_FreeType(&library);
     if (error) {
-        std::cerr << "Failed to initialize FreeType library" << std::endl;
+        cerr << "Failed to initialize FreeType library" << endl;
         return 1;
     }
 
     // Load a font face from a font file
     error = FT_New_Face(library, filename.c_str(), 0, &face);
     if (error == FT_Err_Unknown_File_Format) {
-        std::cerr << "The font file could be opened and read, but it is in an unsupported format" << std::endl;
+        cerr << "The font file could be opened and read, but it is in an unsupported format" << endl;
         return 1;
     } else if (error) {
-        std::cerr << "Failed to load the font file" << std::endl;
+        cerr << "Failed to load the font file" << endl;
         return 1;
     }
+	
+	normalizationMul = 1.0f / (float)face->units_per_EM;
 
-	FT_Set_Pixel_Sizes(face, 0, 48);
-
-    // Iterate over all glyphs
-    FT_ULong charcode;
-    FT_UInt gindex;
-    charcode = FT_Get_First_Char(face, &gindex);
-    while (gindex != 0) {
+	for (FT_UInt gindex = 0; gindex < face->num_glyphs; gindex++) {
         // Load the glyph by its glyph index
-        error = FT_Load_Glyph(face, gindex, FT_LOAD_DEFAULT);
-        if (error) {
-            std::cerr << "Could not load glyph\n";
-            continue;  // Continue with next glyph on error
-        }
+        error = FT_Load_Glyph(face, gindex, FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING);
+        if (!error && face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
+			FT_GlyphSlot slot = face->glyph;
+			FT_Outline* outline = &slot->outline;
 
-        // Here you can access the glyph's data, for example, face->glyph->format
-        // If you want to access the outline: face->glyph->outline
+			currentContour.clear();
 
-		if (face->glyph->format == FT_GLYPH_FORMAT_OUTLINE) {
-			// Access the outline
-			FT_Outline* outline = &face->glyph->outline;
+			FT_Outline_Funcs funcs;
+			funcs.move_to = moveTo;
+			funcs.line_to = lineTo;
+			funcs.conic_to = conicTo;
+			funcs.cubic_to = cubicTo;
+			funcs.shift = 0;
+			funcs.delta = 0;
 
-			// Tessellation using libtess2
-			TESSalloc ma;
-			ma.memalloc = malloc;
-			ma.memfree = free;
-			ma.extraVertices = 256;  // Allocate extra vertices for intersection, etc.
-
-			TESStesselator* tess = tessNewTess(&ma);
-			if (!tess) {
-				std::cerr << "Could not initialize tesselator" << std::endl;
-				return 1;
+			if (FT_Outline_Decompose(outline, &funcs, nullptr)) {
+				cerr << "Error decomposing outline." << endl;
 			}
 
-			std::vector<TESSreal> vertices;
-			std::vector<int> indices;
-
-			// Loop over contours
-			for (int i = 0; i < outline->n_contours; i++) {
-				int start = (i == 0) ? 0 : outline->contours[i - 1] + 1;
-				int end = outline->contours[i];
-				
-				std::vector<TESSreal> contour;
-				for (int j = start; j <= end; j++) {
-					contour.push_back(outline->points[j].x);
-					contour.push_back(outline->points[j].y);
-				}
-				tessAddContour(tess, 2, &contour[0], sizeof(TESSreal) * 2, (end - start + 1));
-			}
-
-			// Tesselate
-			tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, 0);
-			const TESSreal* verts = tessGetVertices(tess);
-			const TESSindex* elems = tessGetElements(tess);
-			int nelems = tessGetElementCount(tess);
-
-			// Use tesselated data
-			// Here, you would process the tesselated output, e.g., rendering or further geometric operations
+			contours.push_back(ContourWithIndex({gindex, currentContour}));
+		} else {
+            cerr << "Could not load glyph" << endl;
 		}
-
-        std::cout << "Processed glyph for charcode: " << charcode << std::endl;
-
-        // Get the next character code and glyph index
-        charcode = FT_Get_Next_Char(face, charcode, &gindex);
     }
 
-    std::cout << "Loaded font: " << face->family_name << ", " << face->style_name << std::endl;
+	/*
+	// sanity check: everything should be sequential
+	for (int contourIndex = 0; contourIndex < contours.size(); contourIndex++) {
+		ContourWithIndex contour = contours[contourIndex];
+		if (contour.index != contourIndex) {
+			cout << contour.index << " is at " << contourIndex << endl;
+		}
+	}
+	*/
+
+    cout << "Loaded font: " << face->family_name << ", " << face->style_name << endl;
+
+	cout << "Clipping and Tesselating..." << endl;
+	auto start = chrono::high_resolution_clock::now();
+
+	Collection output;
+	for (int contourIndex = 0; contourIndex < contours.size(); contourIndex++) {
+		output.addMesh();
+		ContourWithIndex contour = contours[contourIndex];
+		for (int subContourIndex = 0; subContourIndex < contour.subContours.size(); subContourIndex++) {
+			vector<float2> subContour = contour.subContours[subContourIndex];
+			if (subContour.size() > 0) {
+				output.addPath(subContour);
+			}
+		}
+	}
+	auto end = chrono::high_resolution_clock::now();
+	chrono::duration<double> duration = end - start;
+	cout << "Execution time: " << duration.count() << " seconds" << endl;
+
+	cout << "Saving..." << endl;
+
+	output.save(filename);
 
     // Cleanup
     FT_Done_Face(face);
     FT_Done_FreeType(library);
 
+	cout << "Saved" << endl;
+
     return 0;
 }
 
-int main()
-{
-	saveFontUsingFreeTypeAndLibTess("/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/MPLUS1p-Regular.ttf");
-	return 0;
-
-	// saveFont("/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/MPLUS1p-Regular.ttf");
-	// return 0;
-
-	// const auto text = "grape of\nmother";
-	const auto text = "اگر آن ترک شیرازی دستش را به دل ما برد";
-
-	const filesystem::path fontFF =
-		"/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/"
-		"MPLUS1p-Regular.ttf";
-
-	auto glyphs = shapeWithHarfbuzz(text, fontFF);
-	// for (const auto& glyph: glyphs)
-	// {
-	// 	cout << "Glyph ID: " << glyph.index << ", ";
-	// 	cout << "Pos: " << glyph.pos.x << ", " << glyph.pos.y << endl;
-	// }
-
-
-	ttf_t* font = nullptr;
-	ttf_load_from_file(fontFF.u8string().c_str(), &font, false);
-	if (!font)
-		throw std::runtime_error("Unable to load font");
-	// // temporary buffers to store CPU-side data
-
-	// std::vector<float2> vert;
-	// std::vector<GLushort> index;
-	// std::map<wchar_t, void*> vertOffsets;
-
-	// vert.reserve(font->nglyphs * 125);
-	// index.reserve(font->nglyphs * 125);
-
-	// cout << font->hhea.ascender << endl;
-	// cout << extents.ascender << endl;
-	// cout << font->hhea.ascender / extents.ascender << endl;
-	const auto scale = font->hhea.ascender / extents.ascender;
-	// const auto lineHeight = (extents.ascender - extents.descender + extents.line_gap) / 64.f;
-	// const auto lineHeight2 =
-	// 	(font->hhea.ascender - font->hhea.descender + font->hhea.lineGap) / scale / 64.f;
-	// cout << lineHeight << " == " << lineHeight2 << endl;
-
-	// int numErrors = 0;
-	for (const auto& glyphInfo: glyphs)
-	// for (int glyphIdx = 0; glyphIdx < font->nglyphs; glyphIdx++)
-	{
-		try
-		{
-			auto glyphIdx = glyphInfo.index;
-
-			auto glyph = &font->glyphs[glyphIdx];
-
-			ttf_mesh_t* mesh = nullptr;
-			if (glyphIdx==3 || glyphIdx==972)
-				printf("Glyph %d\n", glyphIdx);
-
-			const auto err = ttf_glyph2mesh(glyph, &mesh, TTF_QUALITY_HIGH, TTF_FEATURES_DFLT);
-			if (err != TTF_DONE)
-			{
-				// throw std::runtime_error("unable to load glyph mesh");
-				printf("Failed to create mesh for %d error %d\n", glyphIdx, err);
-			}
-
-			// wprintf(
-			// 	L" '%c' advance: %f, scaled: %f, harfbuzz: %f\n",
-			// 	glyph->symbol,
-			// 	glyph->advance,
-			// 	glyph->advance / scale,
-			// 	glyphInfo.advance);
-
-
-			// auto& obj = objects[g.glyph->symbol];
-
-			// obj.advance = g.glyph->advance;
-			// obj.lbearing = g.glyph->lbearing;
-			// obj.start = (void*)(index.size() * sizeof(GLushort));
-			// vertOffsets[g.glyph->symbol] = (void*)(vert.size() * sizeof(vert[0]));
-
-			// for (int i = 0; i < g.mesh->nvert; i++)
-			// 	vert.push_back(float2 { g.mesh->vert[i].x, g.mesh->vert[i].y });
-
-			// for (int i = 0; i < g.mesh->nfaces; i++)
-			// {
-			// 	index.push_back(g.mesh->faces[i].v1);
-			// 	index.push_back(g.mesh->faces[i].v2);
-			// 	index.push_back(g.mesh->faces[i].v3);
-			// }
-
-			// obj.numPoints = g.mesh->nfaces * 3;
-		}
-		catch (...)
-		{
-			// numErrors++;
-		}
-	}
-
-	// printf("Encountered %d errors while loading\n", numErrors);
-	// printf("\n\n In total\n   %d vertices\n   %d indices\n", vert.size(), index.size());
-
-	if (font)
-		ttf_free(font);
-
+int main() {
+	saveFontUsingFreeTypeAndLibTess("/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/NotoSansJP-Bold.ttf");
 	return 0;
 }

@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 project(TextTest)
 
 add_executable(TextTest
+	"src/clipper.cpp"
 	"src/TextLayout.cpp"
 	"src/main.cpp"
 )
@@ -23,3 +24,9 @@ target_link_libraries(TextTest PRIVATE ${FREETYPE_LIBRARIES})
 add_subdirectory("third-party")
 
 target_link_libraries(TextTest PRIVATE ttf2mesh libtess2)
+
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Available build types" FORCE)
+
+# Release build settings
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+
