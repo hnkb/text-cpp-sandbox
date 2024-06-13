@@ -34,6 +34,8 @@ float2 FT_Vector_to_float2(const FT_Vector* v) {
 
 vector<vector<float2>> currentContour;
 
+#define CURVES_PRECISION 0.01
+
 int moveTo(const FT_Vector* to, void* user) {
 	currentContour.push_back({});
 	currentContour.back() = {FT_Vector_to_float2(to)};
@@ -52,6 +54,32 @@ float2 cubicBezier(const float2& P0, const float2& P1, const float2& P2, const f
     return float2({(float)x, (float)y});
 }
 
+// Function to calculate the Euclidean distance between two points
+double distance(float2 a, float2 b) {
+    return sqrt(pow(b.x - a.x, 2) + pow(b.y - a.y, 2));
+}
+
+// Function to calculate the angle between two vectors
+double angleBetween(float2 a, float2 b) {
+    double dotProduct = a.x * b.x + a.y * b.y;
+    double magnitudeA = sqrt(a.x * a.x + a.y * a.y);
+    double magnitudeB = sqrt(b.x * b.x + b.y * b.y);
+    return acos(dotProduct / (magnitudeA * magnitudeB));
+}
+
+// Estimator function
+int estimateBezierSegmentsCubic(float2 P0, float2 P1, float2 P2, float2 P3, double precision) {
+    double width = max({P0.x, P1.x, P2.x, P3.x}) - min({P0.x, P1.x, P2.x, P3.x});
+    double height = max({P0.y, P1.y, P2.y, P3.y}) - min({P0.y, P1.y, P2.y, P3.y});
+    double maxDimension = max(width, height);
+
+    float2 vector1 = {P1.x - P0.x, P1.y - P0.y};
+    float2 vector2 = {P3.x - P2.x, P3.y - P2.y};
+    double maxAngleDeviation = angleBetween(vector1, vector2);
+
+    return ceil((maxDimension * maxAngleDeviation) / precision);
+}
+
 // Simple function to approximate a cubic Bezier curve with line segments
 int cubicTo(const FT_Vector* control1, const FT_Vector* control2, const FT_Vector* to, void* user) {
     float2 P0 = currentContour.back().back();  // Last point added is the start of this curve
@@ -59,7 +87,7 @@ int cubicTo(const FT_Vector* control1, const FT_Vector* control2, const FT_Vecto
     float2 P2 = FT_Vector_to_float2(control2);
     float2 P3 = FT_Vector_to_float2(to);
 
-    int segments = 20; // This can be adjusted based on desired precision
+    int segments = estimateBezierSegmentsCubic(P0, P1, P2, P3, CURVES_PRECISION);
     for (int i = 1; i <= segments; ++i) {
         double t = i / double(segments);
         float2 pt = cubicBezier(P0, P1, P2, P3, t);
@@ -76,13 +104,25 @@ float2 quadraticBezier(const float2& P0, const float2& P1, const float2& P2, dou
     return float2({(float)x, (float)y});
 }
 
+int estimateBezierSegmentsQuadratic(float2 P0, float2 P1, float2 P2, double precision) {
+    double width = max({P0.x, P1.x, P2.x}) - min({P0.x, P1.x, P2.x});
+    double height = max({P0.y, P1.y, P2.y}) - min({P0.y, P1.y, P2.y});
+    double maxDimension = max(width, height);
+
+    float2 vector1 = {P1.x - P0.x, P1.y - P0.y};
+    float2 vector2 = {P2.x - P1.x, P2.y - P1.y};
+    double maxAngleDeviation = angleBetween(vector1, vector2);
+
+    return ceil((maxDimension * maxAngleDeviation) / precision);
+}
+
 // Function to flatten a quadratic Bezier curve using line segments
 int conicTo(const FT_Vector* control, const FT_Vector* to, void* user) {
     float2 P0 = currentContour.back().back();  // Start point is the last point added
     float2 P1 = FT_Vector_to_float2(control); // Control point
     float2 P2 = FT_Vector_to_float2(to); // End point
 
-    const int segments = 20;  // Number of line segments to approximate the Bezier curve
+    const int segments = estimateBezierSegmentsQuadratic(P0, P1, P2, CURVES_PRECISION);  // Number of line segments to approximate the Bezier curve
     for (int i = 1; i <= segments; ++i) {
         double t = i / double(segments);
         float2 pt = quadraticBezier(P0, P1, P2, t);
@@ -112,6 +152,25 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename) {
         cerr << "Failed to load the font file" << endl;
         return 1;
     }
+
+    // ...
+
+    // Unicode string to hold all characters
+    string allChars = "[";
+
+    // Iterating over all characters in the font
+    FT_ULong  charcode;
+    FT_UInt   gindex;
+    charcode = FT_Get_First_Char(face, &gindex);
+    while (gindex != 0) {
+        allChars += to_string(charcode) + ", ";
+        charcode = FT_Get_Next_Char(face, charcode, &gindex);
+    }
+    allChars += "]";
+
+    cout << allChars << endl;
+
+    // ...
 	
 	normalizationMul = 1.0f / (float)face->units_per_EM;
 
@@ -186,6 +245,7 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename) {
 }
 
 int main() {
-	saveFontUsingFreeTypeAndLibTess("/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/NotoSansJP-Bold.ttf");
+    saveFontUsingFreeTypeAndLibTess("/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/NotoSansJP-Bold.ttf");
+    // saveFontUsingFreeTypeAndLibTess("/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/OpenSans-Regular.ttf");
 	return 0;
 }
