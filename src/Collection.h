@@ -12,6 +12,9 @@
 using namespace std;
 using namespace ClipperLib;
 
+#define OUTPUT_TRIANGLES 1
+#define APPLY_UNION 0
+
 struct Mesh
 {
 	int startIndex;
@@ -61,11 +64,11 @@ public:
 
     void addPath(const vector<float2>& points)
     {
-        ClipperLib::Path path;
-        for (const auto& p : points) {
-            path << ClipperLib::IntPoint(static_cast<int>(p.x * 100000), static_cast<int>(p.y * 100000));
-        }
-        pathBuffer.push_back(path);
+		ClipperLib::Path path;
+		for (const auto& p : points) {
+			path << ClipperLib::IntPoint(static_cast<int>(p.x * 100000), static_cast<int>(p.y * 100000));
+		}
+		pathBuffer.push_back(path);
 
         if (meshes.empty())
             addMesh();
@@ -76,39 +79,65 @@ public:
 private:
     void finishMesh()
     {
-        ClipperLib::Paths solution;
-        if (!pathBuffer.empty()) {
-            ClipperLib::Clipper clipper;
-            clipper.AddPaths(pathBuffer, ClipperLib::ptSubject, true);
-            clipper.Execute(ClipperLib::ctUnion, solution, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
-
-            pathBuffer.clear();  // Clear the path buffer after union
-		}
-
-		// Convert Clipper solution to libtess2 input
-		tess = tessNewTess(nullptr);
-		for (const auto& path : solution) {
-			vector<float2> tessInput;
-			for (const auto& pt : path) {
-				tessInput.push_back({static_cast<float>(pt.X) / 100000.0f, static_cast<float>(pt.Y) / 100000.0f});
-			}
-			tessAddContour(tess, 2, tessInput.data(), sizeof(float2), tessInput.size());
-		}
-
-		if (tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr)) {
-			auto* tessVertices = (float2*)tessGetVertices(tess);
-			int numVertices = tessGetVertexCount(tess);
-			copy_n(tessVertices, numVertices, back_inserter(vertices));
-
-			const auto* elem = tessGetElements(tess);
-			int numIndices = 3 * tessGetElementCount(tess);
-			for (int i = 0; i < numIndices; i++) {
-				indices.push_back(elem[i] + startVertex);
+		ClipperLib::Paths solution;
+		if (!pathBuffer.empty()) {
+			ClipperLib::Clipper clipper;
+			clipper.AddPaths(pathBuffer, ClipperLib::ptSubject, true);
+			if (APPLY_UNION) {
+				clipper.Execute(ClipperLib::ctUnion, solution, ClipperLib::pftNonZero, ClipperLib::pftNonZero);
+			} else {
+				solution = pathBuffer;
 			}
 		}
 
-		tessDeleteTess(tess);
-		tess = nullptr;
+		if (OUTPUT_TRIANGLES) {
+			// Convert Clipper solution to libtess2 input
+			tess = tessNewTess(nullptr);
+			for (const auto& path : solution) {
+				vector<float2> tessInput;
+				for (const auto& pt : path) {
+					tessInput.push_back({static_cast<float>(pt.X) / 100000.0f, static_cast<float>(pt.Y) / 100000.0f});
+				}
+				tessAddContour(tess, 2, tessInput.data(), sizeof(float2), tessInput.size());
+			}
+
+			if (tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr)) {
+				auto* tessVertices = (float2*)tessGetVertices(tess);
+				int numVertices = tessGetVertexCount(tess);
+				copy_n(tessVertices, numVertices, back_inserter(vertices));
+
+				const auto* elem = tessGetElements(tess);
+				int numIndices = 3 * tessGetElementCount(tess);
+				for (int i = 0; i < numIndices; i++) {
+					indices.push_back(elem[i] + startVertex);
+				}
+			}
+
+			tessDeleteTess(tess);
+			tess = nullptr;
+		} else {
+			vector<float2> points;
+			for (const auto& path : solution) {
+				points.clear();
+				for (const auto& pt : path) {
+					points.push_back({static_cast<float>(pt.X) / 100000.0f, static_cast<float>(pt.Y) / 100000.0f});
+				}
+				
+				for (size_t i = 0; i < points.size(); ++i) {
+					indices.push_back(startVertex + i);     // Index of current vertex
+					indices.push_back(startVertex + (i + 1) % points.size()); // Index of next vertex
+				}
+
+				for (size_t i = 0; i < points.size(); ++i) {
+					vertices.push_back(points[i]);
+				}
+
+        		startVertex = (int)vertices.size();
+				// cout << "points count: " << points.size() << endl;
+			}
+		}
+
+		pathBuffer.clear();  // Clear the path buffer after union
 
 		if (!meshes.empty())
 			meshes.back().indexCount = indices.size() - meshes.back().startIndex;
