@@ -13,7 +13,7 @@ using namespace std;
 using namespace ClipperLib;
 
 #define OUTPUT_TRIANGLES 1
-#define APPLY_UNION 0
+#define APPLY_UNION 1
 
 struct Mesh
 {
@@ -157,6 +157,8 @@ void Collection::save(const filesystem::path& filename)
 
 	auto outFile = filename;
 	outFile.replace_extension(".vert");
+	// we have to invert
+	for (auto& v: vertices) v.y = 1 - v.y;
 	writeToFile(outFile, vertices);
 
 	outFile.replace_extension(".idx");
