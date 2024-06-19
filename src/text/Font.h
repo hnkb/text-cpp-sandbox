@@ -6,6 +6,12 @@
 #include <string>
 
 
+struct Mesh
+{
+	int startIndex;
+	int indexCount;
+};
+
 struct ShapedGlyph
 {
 	uint32_t index;
@@ -15,3 +21,5 @@ struct ShapedGlyph
 
 std::vector<ShapedGlyph>
 	shapeWithHarfbuzz(const std::string& text, const std::filesystem::path& fontFilename);
+
+void saveFont_ttf2mesh(const std::filesystem::path& filename);
