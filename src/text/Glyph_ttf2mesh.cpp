@@ -62,6 +62,9 @@ void saveFont_ttf2mesh(const filesystem::path& filename)
 
 	ttf_free(ttf);
 
+	for (auto& v: vertices)
+		v.y = 1 - v.y;
+
 	auto outFile = filename;
 	outFile.replace_extension(".vert");
 	File::writeAll(vertices, outFile);
