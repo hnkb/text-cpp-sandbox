@@ -1,4 +1,5 @@
 #include "Font.h"
+#include "../utils/Compression.h"
 #include "../utils/File.h"
 #include <ttf2mesh.h>
 
@@ -66,14 +67,14 @@ void saveFont_ttf2mesh(const filesystem::path& filename)
 		v.y = 1 - v.y;
 
 	auto outFile = filename;
-	outFile.replace_extension(".vert");
-	File::writeAll(vertices, outFile);
+	outFile.replace_extension(".vert-brotli");
+	File::writeAll(compress(vertices, Compression::Brotli, 10), outFile);
 
-	outFile.replace_extension(".idx");
-	File::writeAll(indices, outFile);
+	outFile.replace_extension(".idx-brotli");
+	File::writeAll(compress(indices, Compression::Brotli, 10), outFile);
 
-	outFile.replace_extension(".mesh");
-	File::writeAll(meshes, outFile);
+	outFile.replace_extension(".mesh-brotli");
+	File::writeAll(compress(meshes, Compression::Brotli, 10), outFile);
 
 	printf(
 		"Font '%s' loaded into %.2f MB buffer with %zu glyphs, %d errors, %zu vertices, %zu "
