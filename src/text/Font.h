@@ -1,16 +1,10 @@
 #pragma once
 
-#include "../utils/Math.h"
+#include "../graphics/Mesh.h"
 #include <vector>
 #include <filesystem>
 #include <string>
 
-
-struct Mesh
-{
-	int startIndex;
-	int indexCount;
-};
 
 struct ShapedGlyph
 {

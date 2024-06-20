@@ -44,7 +44,13 @@ FetchContent_MakeAvailable (woff2)
 target_include_directories(woff2common INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/woff2/include")
 
 
-### configure and include ttf2mesh
+### configure and include libraries with local copies
 
 add_library (ttf2mesh STATIC "ttf2mesh/ttf2mesh.c")
 target_include_directories(ttf2mesh PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ttf2mesh")
+
+add_library (delabella STATIC "delabella/delabella.cpp")
+target_include_directories(delabella PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/delabella")
+
+add_library (nanosvg INTERFACE)
+target_include_directories(nanosvg INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/nanosvg")

@@ -5,6 +5,8 @@ project(NativeSandbox)
 set(TARGET_NAME ${PROJECT_NAME})
 
 add_executable(${TARGET_NAME}
+	"src/graphics/Collection.cpp"
+	"src/graphics/SVG.cpp"
 	"src/text/Glyph_ttf2mesh.cpp"
 	"src/text/TextLayout.cpp"
 	"src/text/WOFF2.cpp"
@@ -26,6 +28,8 @@ target_link_libraries(${TARGET_NAME} PRIVATE ${HARFBUZZ_LIBRARIES})
 add_subdirectory("third-party")
 target_link_libraries(${TARGET_NAME} PRIVATE
 	ttf2mesh
+	nanosvg
+	delabella
 	brotlienc brotlicommon
 	woff2dec woff2common
 )
