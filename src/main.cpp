@@ -29,7 +29,7 @@ int main()
 	{
 		auto& path = entry.path();
 		if (extentions.find(path.extension()) != extentions.end())
-			saveFont_ttf2mesh(path);
+			saveFontUsingFreeTypeAndLibTess(path);
 	}
 	return 0;
 }

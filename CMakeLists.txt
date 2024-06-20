@@ -8,6 +8,7 @@ add_executable(${TARGET_NAME}
 	"src/graphics/Collection.cpp"
 	"src/graphics/SVG.cpp"
 	"src/text/Glyph_ttf2mesh.cpp"
+	"src/text/Glyph.cpp"
 	"src/text/TextLayout.cpp"
 	"src/text/WOFF2.cpp"
 	"src/utils/Compression.cpp"
@@ -24,6 +25,10 @@ pkg_check_modules(HARFBUZZ REQUIRED harfbuzz)
 target_include_directories(${TARGET_NAME} PRIVATE ${HARFBUZZ_INCLUDE_DIRS})
 target_link_directories(${TARGET_NAME} PRIVATE ${HARFBUZZ_LIBRARY_DIRS})
 target_link_libraries(${TARGET_NAME} PRIVATE ${HARFBUZZ_LIBRARIES})
+
+find_package(Freetype REQUIRED)
+target_include_directories(${TARGET_NAME} PRIVATE ${FREETYPE_INCLUDE_DIRS})
+target_link_libraries(${TARGET_NAME} PRIVATE ${FREETYPE_LIBRARIES})
 
 add_subdirectory("third-party")
 target_link_libraries(${TARGET_NAME} PRIVATE
