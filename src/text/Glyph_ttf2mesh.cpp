@@ -75,14 +75,10 @@ void saveFont_ttf2mesh(const filesystem::path& filename)
 		v.y = 1 - v.y;
 
 	auto outFile = filename;
-	outFile.replace_extension(".vert-brotli");
-	File::writeAll(compress(vertices, Compression::Brotli, 10), outFile);
-
-	outFile.replace_extension(".idx-brotli");
-	File::writeAll(compress(indices, Compression::Brotli, 10), outFile);
-
-	outFile.replace_extension(".mesh-brotli");
-	File::writeAll(compress(meshes, Compression::Brotli, 10), outFile);
+	File::Pack output(outFile.replace_extension("bin"), 'w', "FNTMSH");
+	output.add("vert", vertices, 20);
+	output.add("idx", indices, 20);
+	output.add("mesh", meshes, 20);
 
 	printf(
 		"Font '%s' loaded into %.2f MB buffer with %zu glyphs, %d errors, %zu vertices, %zu "
