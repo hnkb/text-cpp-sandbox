@@ -3,13 +3,13 @@
 #include "../utils/Math.h"
 #include "../utils/File.h"
 #include <tesselator.h>
+#include <clipper.hpp>
 
 
 struct Mesh
 {
 	int startIndex;
 	int indexCount;
-	uint32_t color;
 
 	Mesh() : startIndex(0), indexCount(0) {}
 	Mesh(int startIndex) : startIndex(startIndex), indexCount(0) {}
@@ -37,23 +37,22 @@ public:
 
 		const auto alpha = (int)(a * opacity);
 
-		meshes.back().color = (r << 24) | (g << 16) | (b << 8) | (alpha & 0xff);
-
 		startVertex = (int)vertices.size();
-		tess = tessNewTess(nullptr);
-		if (!tess)
-		{
-			fprintf(stderr, "Error: Couldn't create tessellator");
-			return;
-		}
-		tessSetOption(tess, TESS_CONSTRAINED_DELAUNAY_TRIANGULATION, 1);
 	}
 
 	void addPath(const std::vector<float2>& points)
 	{
+		ClipperLib::Path path;
+		for (const auto& p: points)
+		{
+			path << ClipperLib::IntPoint(
+				static_cast<int>(p.x * 100'000),
+				static_cast<int>(p.y * 100'000));
+		}
+		pathBuffer.push_back(path);
+
 		if (meshes.empty())
 			addMesh();
-		tessAddContour(tess, 2, points.data(), sizeof(float2), points.size());
 	}
 
 	void save(const std::filesystem::path& filename);
@@ -61,28 +60,50 @@ public:
 private:
 	void finishMesh()
 	{
-		if (tess)
+		ClipperLib::Paths solution;
+		if (!pathBuffer.empty())
 		{
-			if (!tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr))
+			ClipperLib::Clipper clipper;
+			clipper.AddPaths(pathBuffer, ClipperLib::ptSubject, true);
+			clipper.Execute(
+				ClipperLib::ctUnion,
+				solution,
+				ClipperLib::pftNonZero,
+				ClipperLib::pftNonZero);
+
+			pathBuffer.clear();  // Clear the path buffer after union
+		}
+
+		// Convert Clipper solution to libtess2 input
+		tess = tessNewTess(nullptr);
+		for (const auto& path: solution)
+		{
+			std::vector<float2> tessInput;
+			for (const auto& pt: path)
 			{
-				fprintf(stderr, "Error: Couldn't tessellate");
-				return;
+				tessInput.push_back(
+					{ static_cast<float>(pt.X) / 100000.0f,
+					  static_cast<float>(pt.Y) / 100000.0f });
 			}
+			tessAddContour(tess, 2, tessInput.data(), sizeof(float2), tessInput.size());
+		}
 
-			copy_n(
-				(float2*)tessGetVertices(tess),
-				tessGetVertexCount(tess),
-				back_inserter(vertices));
+		if (tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr))
+		{
+			auto* tessVertices = (float2*)tessGetVertices(tess);
+			int numVertices = tessGetVertexCount(tess);
+			copy_n(tessVertices, numVertices, back_inserter(vertices));
 
-			auto elem = tessGetElements(tess);
-			const auto numIndices = 3 * tessGetElementCount(tess);
+			const auto* elem = tessGetElements(tess);
+			int numIndices = 3 * tessGetElementCount(tess);
 			for (int i = 0; i < numIndices; i++)
 				indices.push_back(elem[i] + startVertex);
-
-			tessDeleteTess(tess);
-			tess = nullptr;
 		}
-		if (meshes.size())
+
+		tessDeleteTess(tess);
+		tess = nullptr;
+
+		if (!meshes.empty())
 			meshes.back().indexCount = indices.size() - meshes.back().startIndex;
 	}
 
@@ -92,4 +113,6 @@ private:
 	std::vector<float2> vertices;
 	std::vector<uint32_t> indices;
 	std::vector<Mesh> meshes;
+
+	ClipperLib::Paths pathBuffer;
 };

@@ -35,7 +35,13 @@ target_link_libraries(${TARGET_NAME} PRIVATE
 	ttf2mesh
 	nanosvg
 	delabella
-	libtess2
+	libtess2 clipper
 	brotlienc brotlicommon
 	woff2dec woff2common
 )
+
+set(CMAKE_CONFIGURATION_TYPES "Debug;Release" CACHE STRING "Available build types" FORCE)
+
+# Release build settings
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+

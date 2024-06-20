@@ -58,3 +58,6 @@ target_include_directories(nanosvg INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/nanosv
 file(GLOB LIBTESS2_SOURCES "libtess2-1.0.2/Source/*.c")
 add_library (libtess2 STATIC ${LIBTESS2_SOURCES})
 target_include_directories(libtess2 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/libtess2-1.0.2/Include")
+
+add_library (clipper STATIC "clipper_ver6.4.2/src/clipper.cpp")
+target_include_directories(clipper PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/clipper_ver6.4.2/include")
