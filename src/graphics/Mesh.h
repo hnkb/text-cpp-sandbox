@@ -6,6 +6,9 @@
 #include <clipper.hpp>
 
 
+#define OUTPUT_TRIANGLES 1
+#define APPLY_UNION 0
+
 struct Mesh
 {
 	int startIndex;
@@ -65,43 +68,80 @@ private:
 		{
 			ClipperLib::Clipper clipper;
 			clipper.AddPaths(pathBuffer, ClipperLib::ptSubject, true);
-			clipper.Execute(
-				ClipperLib::ctUnion,
-				solution,
-				ClipperLib::pftNonZero,
-				ClipperLib::pftNonZero);
-
-			pathBuffer.clear();  // Clear the path buffer after union
-		}
-
-		// Convert Clipper solution to libtess2 input
-		tess = tessNewTess(nullptr);
-		for (const auto& path: solution)
-		{
-			std::vector<float2> tessInput;
-			for (const auto& pt: path)
+			if (APPLY_UNION)
 			{
-				tessInput.push_back(
-					{ static_cast<float>(pt.X) / 100000.0f,
-					  static_cast<float>(pt.Y) / 100000.0f });
+				clipper.Execute(
+					ClipperLib::ctUnion,
+					solution,
+					ClipperLib::pftNonZero,
+					ClipperLib::pftNonZero);
 			}
-			tessAddContour(tess, 2, tessInput.data(), sizeof(float2), tessInput.size());
+			else
+			{
+				solution = pathBuffer;
+			}
 		}
 
-		if (tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr))
+		if (OUTPUT_TRIANGLES)
 		{
-			auto* tessVertices = (float2*)tessGetVertices(tess);
-			int numVertices = tessGetVertexCount(tess);
-			copy_n(tessVertices, numVertices, back_inserter(vertices));
+			// Convert Clipper solution to libtess2 input
+			tess = tessNewTess(nullptr);
+			for (const auto& path: solution)
+			{
+				std::vector<float2> tessInput;
+				for (const auto& pt: path)
+				{
+					tessInput.push_back(
+						{ static_cast<float>(pt.X) / 100000.0f,
+						  static_cast<float>(pt.Y) / 100000.0f });
+				}
+				tessAddContour(tess, 2, tessInput.data(), sizeof(float2), tessInput.size());
+			}
 
-			const auto* elem = tessGetElements(tess);
-			int numIndices = 3 * tessGetElementCount(tess);
-			for (int i = 0; i < numIndices; i++)
-				indices.push_back(elem[i] + startVertex);
+			if (tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr))
+			{
+				auto* tessVertices = (float2*)tessGetVertices(tess);
+				int numVertices = tessGetVertexCount(tess);
+				copy_n(tessVertices, numVertices, back_inserter(vertices));
+
+				const auto* elem = tessGetElements(tess);
+				int numIndices = 3 * tessGetElementCount(tess);
+				for (int i = 0; i < numIndices; i++)
+					indices.push_back(elem[i] + startVertex);
+			}
+
+			tessDeleteTess(tess);
+			tess = nullptr;
+		}
+		else
+		{
+			std::vector<float2> points;
+			for (const auto& path: solution)
+			{
+				points.clear();
+				for (const auto& pt: path)
+				{
+					points.push_back(
+						{ static_cast<float>(pt.X) / 100000.0f,
+						  static_cast<float>(pt.Y) / 100000.0f });
+				}
+
+				for (size_t i = 0; i < points.size(); ++i)
+				{
+					indices.push_back(startVertex + i);  // Index of current vertex
+					indices.push_back(startVertex + (i + 1) % points.size());  // Index of next
+																			   // vertex
+				}
+
+				for (size_t i = 0; i < points.size(); ++i)
+					vertices.push_back(points[i]);
+
+				startVertex = (int)vertices.size();
+				// cout << "points count: " << points.size() << endl;
+			}
 		}
 
-		tessDeleteTess(tess);
-		tess = nullptr;
+		pathBuffer.clear();  // Clear the path buffer after union
 
 		if (!meshes.empty())
 			meshes.back().indexCount = indices.size() - meshes.back().startIndex;
