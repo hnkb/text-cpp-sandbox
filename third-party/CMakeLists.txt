@@ -61,3 +61,6 @@ target_include_directories(libtess2 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/libtess2
 
 add_library (clipper STATIC "clipper_ver6.4.2/src/clipper.cpp")
 target_include_directories(clipper PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/clipper_ver6.4.2/include")
+
+add_library (rapidjson INTERFACE)
+target_include_directories(rapidjson INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/rapidjson-1.1.0/include")

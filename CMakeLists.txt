@@ -36,6 +36,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
 	nanosvg
 	delabella
 	libtess2 clipper
+	rapidjson
 	brotlienc brotlicommon
 	woff2dec woff2common
 )

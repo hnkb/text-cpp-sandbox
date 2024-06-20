@@ -4,148 +4,95 @@
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
 
+#include "rapidjson/document.h"
+#include "rapidjson/prettywriter.h"
+#include "rapidjson/stringbuffer.h"
+
 #include <iostream>
 
 using namespace std;
 
 
-float normalizationMul;
-
-struct ContourWithIndex
+struct Quadratic
 {
-	FT_UInt index;
-	vector<vector<float2>> subContours;
-
-	bool operator==(const ContourWithIndex& rhs) const { return this->index == rhs.index; }
+	float2 p0, p1, p2;
+	Quadratic() {}
+	Quadratic(float2 p0, float2 p1, float2 p2) : p0(p0), p1(p1), p2(p2) {}
 };
 
-vector<ContourWithIndex> contours;
-vector<vector<float2>> currentContour;
-
-float2 FT_Vector_to_float2(const FT_Vector* v)
+class Path
 {
-	return float2(v->x, v->y) * normalizationMul;
-}
+public:
+	float2 currentPos = { 0, 0 };
+	vector<vector<Quadratic>> contours;
+};
 
+float scale = 1.f;
 
-#define CURVES_PRECISION 0.01
-
-int moveTo(const FT_Vector* to, void* user)
+// Move to callback
+int move_to(const FT_Vector* to, void* user)
 {
-	currentContour.push_back({});
-	currentContour.back() = { FT_Vector_to_float2(to) };
-	return 0;  // Return value of 0 indicates success
-}
-
-int lineTo(const FT_Vector* to, void* user)
-{
-	currentContour.back().push_back(FT_Vector_to_float2(to));
+	// printf("Move to (%ld, %ld)\n", to->x, to->y);
+	auto bezier = (Path*)user;
+	bezier->currentPos = float2(to->x, to->y) / scale;
+	bezier->contours.emplace_back();
 	return 0;
 }
 
-// Evaluate a cubic Bezier at a given t
-float2 cubicBezier(
-	const float2& P0,
-	const float2& P1,
-	const float2& P2,
-	const float2& P3,
-	double t)
+// Line to callback
+int line_to(const FT_Vector* to, void* user)
 {
-	return bezier(t, P0, P1, P2, P3);
+	Path* bezier = (Path*)user;
+	// printf("Line to (%ld, %ld)\n", to->x, to->y);
+	auto& p0 = bezier->currentPos;
+	float2 p1 = float2(to->x, to->y) / scale;
+	bezier->contours.back().emplace_back(p0, (p0 + p1) / 2.f, p1);
+	bezier->currentPos = p1;
+	return 0;
 }
 
-// Function to calculate the Euclidean distance between two points
-double distance(float2 a, float2 b)
+// Conic to callback
+int conic_to(const FT_Vector* control, const FT_Vector* to, void* user)
 {
-	return sqrt(pow(b.x - a.x, 2) + pow(b.y - a.y, 2));
+	Path* bezier = (Path*)user;
+	// printf(
+	// 	"Conic to control (%ld, %ld) end (%ld, %ld)\n",
+	// 	control->x,
+	// 	control->y,
+	// 	to->x,
+	// 	to->y);
+	auto& p0 = bezier->currentPos;
+	float2 p1 = float2(control->x, control->y) / scale;
+	float2 p2 = float2(to->x, to->y) / scale;
+	bezier->contours.back().emplace_back(p0, p1, p2);
+	bezier->currentPos = p2;
+	return 0;
 }
 
-// Function to calculate the angle between two vectors
-double angleBetween(float2 a, float2 b)
-{
-	double dotProduct = a.x * b.x + a.y * b.y;
-	double magnitudeA = sqrt(a.x * a.x + a.y * a.y);
-	double magnitudeB = sqrt(b.x * b.x + b.y * b.y);
-	return acos(dotProduct / (magnitudeA * magnitudeB));
-}
-
-// Estimator function
-int estimateBezierSegmentsCubic(float2 P0, float2 P1, float2 P2, float2 P3, double precision)
-{
-	double width = max({ P0.x, P1.x, P2.x, P3.x }) - min({ P0.x, P1.x, P2.x, P3.x });
-	double height = max({ P0.y, P1.y, P2.y, P3.y }) - min({ P0.y, P1.y, P2.y, P3.y });
-	double maxDimension = max(width, height);
-
-	float2 vector1 = { P1.x - P0.x, P1.y - P0.y };
-	float2 vector2 = { P3.x - P2.x, P3.y - P2.y };
-	double maxAngleDeviation = angleBetween(vector1, vector2);
-
-	return ceil((maxDimension * maxAngleDeviation) / precision);
-}
-
-// Simple function to approximate a cubic Bezier curve with line segments
-int cubicTo(
+// Cubic to callback
+int cubic_to(
 	const FT_Vector* control1,
 	const FT_Vector* control2,
 	const FT_Vector* to,
 	void* user)
 {
-	float2 P0 = currentContour.back().back();  // Last point added is the start of this curve
-	float2 P1 = FT_Vector_to_float2(control1);
-	float2 P2 = FT_Vector_to_float2(control2);
-	float2 P3 = FT_Vector_to_float2(to);
-
-	int segments = estimateBezierSegmentsCubic(P0, P1, P2, P3, CURVES_PRECISION);
-	for (int i = 1; i <= segments; ++i)
-	{
-		double t = i / double(segments);
-		float2 pt = cubicBezier(P0, P1, P2, P3, t);
-		currentContour.back().push_back(pt);
-	}
-
+	// Path* bezier = (Path*)user;
+	// printf(
+	// 	"Cubic to control1 (%ld, %ld) control2 (%ld, %ld) end (%ld, %ld)\n",
+	// 	control1->x,
+	// 	control1->y,
+	// 	control2->x,
+	// 	control2->y,
+	// 	to->x,
+	// 	to->y);
+	// printf("====+> not supproted\n");
+	// add_point(bezier, *control1);
+	// add_point(bezier, *control2);
+	// add_point(bezier, *to);
 	return 0;
 }
 
-// Evaluate a quadratic Bezier curve at a given t
-float2 quadraticBezier(const float2& P0, const float2& P1, const float2& P2, double t)
-{
-	return (1 - t) * (1 - t) * P0 + 2 * (1 - t) * t * P1 + t * t * P2;
-}
 
-int estimateBezierSegmentsQuadratic(float2 P0, float2 P1, float2 P2, double precision)
-{
-	double width = max({ P0.x, P1.x, P2.x }) - min({ P0.x, P1.x, P2.x });
-	double height = max({ P0.y, P1.y, P2.y }) - min({ P0.y, P1.y, P2.y });
-	double maxDimension = max(width, height);
-
-	float2 vector1 = { P1.x - P0.x, P1.y - P0.y };
-	float2 vector2 = { P2.x - P1.x, P2.y - P1.y };
-	double maxAngleDeviation = angleBetween(vector1, vector2);
-
-	return ceil((maxDimension * maxAngleDeviation) / precision);
-}
-
-// Function to flatten a quadratic Bezier curve using line segments
-int conicTo(const FT_Vector* control, const FT_Vector* to, void* user)
-{
-	float2 P0 = currentContour.back().back();  // Start point is the last point added
-	float2 P1 = FT_Vector_to_float2(control);  // Control point
-	float2 P2 = FT_Vector_to_float2(to);       // End point
-
-	const int segments =
-		estimateBezierSegmentsQuadratic(P0, P1, P2, CURVES_PRECISION);  // Number of line
-																		// segments to
-																		// approximate the
-																		// Bezier curve
-	for (int i = 1; i <= segments; ++i)
-	{
-		double t = i / double(segments);
-		float2 pt = quadraticBezier(P0, P1, P2, t);
-		currentContour.back().push_back(pt);
-	}
-
-	return 0;  // Return 0 to indicate success
-}
 
 int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 {
@@ -181,28 +128,8 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 		return 1;
 	}
 
-	// ...
 
-	// Unicode string to hold all characters
-	string allChars = "[";
-
-	// Iterating over all characters in the font
-	FT_ULong charcode;
-	FT_UInt gindex;
-	charcode = FT_Get_First_Char(face, &gindex);
-	while (gindex != 0)
-	{
-		allChars += to_string(charcode) + ", ";
-		charcode = FT_Get_Next_Char(face, charcode, &gindex);
-	}
-	allChars += "]";
-
-	cout << allChars << endl;
-
-	// ...
-
-	normalizationMul = 1.0f / (float)face->units_per_EM;
-
+#if 0
 	for (FT_UInt gindex = 0; gindex < face->num_glyphs; gindex++)
 	{
 		// Load the glyph by its glyph index
@@ -232,54 +159,120 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 			cerr << "Could not load glyph" << endl;
 		}
 	}
+#endif
 
-	/*
-	// sanity check: everything should be sequential
-	for (int contourIndex = 0; contourIndex < contours.size(); contourIndex++) {
-		ContourWithIndex contour = contours[contourIndex];
-		if (contour.index != contourIndex) {
-			cout << contour.index << " is at " << contourIndex << endl;
-		}
-	}
-	*/
+
+	rapidjson::Document document;
+	auto& allocator = document.GetAllocator();
+	document.SetArray();
 
 	cout << "Loaded font: " << face->family_name << ", " << face->style_name << endl;
 
-	cout << "Clipping and Tesselating..." << endl;
-	auto start = chrono::high_resolution_clock::now();
+	scale = face->units_per_EM;
 
-	Collection output;
-	for (int contourIndex = 0; contourIndex < contours.size(); contourIndex++)
+
+	for (FT_UInt gindex = 0; gindex < face->num_glyphs; gindex++)
 	{
-		output.addMesh();
-		ContourWithIndex contour = contours[contourIndex];
-		for (int subContourIndex = 0; subContourIndex < contour.subContours.size();
-			 subContourIndex++)
+		// Load the glyph by its glyph index
+		error = FT_Load_Glyph(face, gindex, FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING);
+		if (!error && face->glyph->format == FT_GLYPH_FORMAT_OUTLINE)
 		{
-			vector<float2> subContour = contour.subContours[subContourIndex];
-			if (subContour.size() > 0)
-				output.addPath(subContour);
+			FT_GlyphSlot slot = face->glyph;
+			FT_Outline outline = slot->outline;
+
+			// Print some information about the glyph
+			// printf("Number of contours: %d\n", outline.n_contours);
+			// printf("Number of points: %d\n", outline.n_points);
+
+			FT_Outline_Funcs funcs;
+			funcs.move_to = move_to;
+			funcs.line_to = line_to;
+			funcs.conic_to = conic_to;
+			funcs.cubic_to = cubic_to;
+			funcs.shift = 0;
+			funcs.delta = 0;
+
+			Path path;
+
+			error = FT_Outline_Decompose(&outline, &funcs, &path);
+			if (error)
+			{
+				printf("Could not decompose outline\n");
+				continue;
+			}
+
+			rapidjson::Value jcontours(rapidjson::kArrayType);
+
+			// Print the quadratics
+			for (const auto& contour: path.contours)
+			{
+				rapidjson::Value quads(rapidjson::kArrayType);
+
+				// printf("Contour:\n");
+				for (const auto& quad: contour)
+				{
+					rapidjson::Value jquad(rapidjson::kObjectType);
+					jquad.AddMember(
+						"p0",
+						rapidjson::Value()
+							.SetArray()
+							.PushBack(quad.p0.x, allocator)
+							.PushBack(quad.p0.y, allocator),
+						allocator);
+					jquad.AddMember(
+						"p1",
+						rapidjson::Value()
+							.SetArray()
+							.PushBack(quad.p1.x, allocator)
+							.PushBack(quad.p1.y, allocator),
+						allocator);
+					jquad.AddMember(
+						"p2",
+						rapidjson::Value()
+							.SetArray()
+							.PushBack(quad.p2.x, allocator)
+							.PushBack(quad.p2.y, allocator),
+						allocator);
+					quads.PushBack(jquad, allocator);
+
+					// printf(
+					// 	"  Quadratic: (%f, %f) (%f, %f) (%f, %f)\n",
+					// 	quad.p0.x,
+					// 	quad.p0.y,
+					// 	quad.p1.x,
+					// 	quad.p1.y,
+					// 	quad.p2.x,
+					// 	quad.p2.y);
+				}
+				jcontours.PushBack(quads, allocator);
+				// printf("\n");
+			}
+
+			rapidjson::Value jglyph(rapidjson::kObjectType);
+			jglyph.AddMember("index", gindex, allocator);
+			jglyph.AddMember("contours", jcontours, allocator);
+			document.PushBack(jglyph, allocator);
 		}
 	}
-	auto end = chrono::high_resolution_clock::now();
-	chrono::duration<double> duration = end - start;
-	cout << "Execution time: " << duration.count() << " seconds" << endl;
+	{
+		// Convert the JSON object to a string
+		rapidjson::StringBuffer buffer;
+		rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(buffer);
+		document.Accept(writer);
 
-	cout << "Saving..." << endl;
+		auto file = filename;
+		File::writeAll(buffer.GetString(), buffer.GetSize(), file.replace_extension(".json"));
 
-	auto outfile = filename;
-	output.save(outfile.replace_extension(".bin"));
+		// Output the JSON string
+		// std::cout << buffer.GetString() << std::endl;
+	}
+
 
 	// Cleanup
 	FT_Done_Face(face);
 	FT_Done_FreeType(library);
 	if (buffer)
 		delete buffer;
-
-	currentContour.clear();
-	contours.clear();
-
-	cout << "Saved" << endl;
 
 	return 0;
 }
