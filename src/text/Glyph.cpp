@@ -283,12 +283,3 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 
 	return 0;
 }
-
-int main()
-{
-	// saveFontUsingFreeTypeAndLibTess("/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/OpenSans-Regular.ttf");
-	saveFontUsingFreeTypeAndLibTess(
-		"/Users/georgepomaskin/Projects/render-sandbox/client/cpp/assets/fonts/"
-		"NotoSansJP-Bold.ttf");
-	return 0;
-}

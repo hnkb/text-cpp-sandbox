@@ -11,6 +11,7 @@ add_executable(${TARGET_NAME}
 	"src/text/WOFF2.cpp"
 	"src/utils/Compression.cpp"
 	"src/utils/FilePack.cpp"
+	"src/main.cpp"
 )
 
 
