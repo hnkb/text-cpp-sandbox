@@ -30,6 +30,7 @@ target_link_libraries(${TARGET_NAME} PRIVATE
 	ttf2mesh
 	nanosvg
 	delabella
+	libtess2
 	brotlienc brotlicommon
 	woff2dec woff2common
 )
