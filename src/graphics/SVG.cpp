@@ -15,6 +15,7 @@ void saveSVG(const filesystem::path& filename)
 	printf("SVG image with size %f x %f\n", image->width, image->height);
 
 	Collection output;
+	vector<float2> points;
 
 	for (auto shape = image->shapes; shape != NULL; shape = shape->next)
 	{
@@ -28,7 +29,7 @@ void saveSVG(const filesystem::path& filename)
 
 		for (auto path = shape->paths; path != NULL; path = path->next)
 		{
-			output.addPath();
+			points.clear();
 			// printf(
 			// 	"    Path with %d points, closed=%d, bounds %f %f %f %f\n",
 			// 	path->npts,
@@ -60,13 +61,21 @@ void saveSVG(const filesystem::path& filename)
 				if (abs(cross1) < epsilon && abs(cross2) < epsilon)
 				{
 					// straight line
-					// output.addPoint(p0);
-					output.addPoint(p3);
+					// points.push_back(p0);
+					points.push_back(p3);
 				}
 				else
+				{
 					for (float t = 0; t <= 1; t += 0.05f)
-						output.addPoint(bezier(t, p0, p1, p2, p3));
+						points.push_back(bezier(t, p0, p1, p2, p3));
+					// points.push_back(p0);
+					// points.push_back(p1);
+					// points.push_back(p2);
+					// points.push_back(p3);
+				}
 			}
+
+			output.addPath(points);
 		}
 	}
 

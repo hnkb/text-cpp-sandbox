@@ -2,7 +2,7 @@
 
 #include "../utils/Math.h"
 #include "../utils/File.h"
-#include <delabella.h>
+#include <tesselator.h>
 
 
 struct Mesh
@@ -24,11 +24,6 @@ public:
 		vertices.reserve(1000);
 		indices.reserve(6000);
 	}
-	~Collection()
-	{
-		if (idb)
-			idb->Destroy();
-	}
 
 	void addMesh(uint32_t color = 0xff00'0000, float opacity = 1.0f)
 	{
@@ -43,43 +38,58 @@ public:
 		const auto alpha = (int)(a * opacity);
 
 		meshes.back().color = (r << 24) | (g << 16) | (b << 8) | (alpha & 0xff);
+
+		startVertex = (int)vertices.size();
+		tess = tessNewTess(nullptr);
+		if (!tess)
+		{
+			fprintf(stderr, "Error: Couldn't create tessellator");
+			return;
+		}
+		tessSetOption(tess, TESS_CONSTRAINED_DELAUNAY_TRIANGULATION, 1);
 	}
 
-	void addPath()
+	void addPath(const std::vector<float2>& points)
 	{
 		if (meshes.empty())
 			addMesh();
-
-		if (currentPathStartVertex < vertices.size())
-		{
-			delabellaTriangulate(
-				vertices.data() + currentPathStartVertex,
-				vertices.size() - currentPathStartVertex);
-			currentPathStartVertex = vertices.size();
-		}
+		tessAddContour(tess, 2, points.data(), sizeof(float2), points.size());
 	}
-
-	void addPoint(const float2& point) { vertices.push_back(point); }
-	void addPoint(float x, float y) { vertices.emplace_back(x, y); }
 
 	void save(const std::filesystem::path& filename);
 
 private:
-	void delabellaTriangulate(float2* start, size_t count);
 	void finishMesh()
 	{
-		if (meshes.size())
+		if (tess)
 		{
-			addPath();
-			meshes.back().indexCount = indices.size() - meshes.back().startIndex;
+			if (!tessTesselate(tess, TESS_WINDING_ODD, TESS_POLYGONS, 3, 2, nullptr))
+			{
+				fprintf(stderr, "Error: Couldn't tessellate");
+				return;
+			}
+
+			copy_n(
+				(float2*)tessGetVertices(tess),
+				tessGetVertexCount(tess),
+				back_inserter(vertices));
+
+			auto elem = tessGetElements(tess);
+			const auto numIndices = 3 * tessGetElementCount(tess);
+			for (int i = 0; i < numIndices; i++)
+				indices.push_back(elem[i] + startVertex);
+
+			tessDeleteTess(tess);
+			tess = nullptr;
 		}
+		if (meshes.size())
+			meshes.back().indexCount = indices.size() - meshes.back().startIndex;
 	}
 
-	int currentPathStartVertex = 0;
+	int startVertex = 0;
+	TESStesselator* tess = nullptr;
 
 	std::vector<float2> vertices;
 	std::vector<uint32_t> indices;
 	std::vector<Mesh> meshes;
-
-	IDelaBella2<float>* idb = nullptr;
 };
