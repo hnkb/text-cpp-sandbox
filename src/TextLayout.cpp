@@ -4,7 +4,7 @@
 
 using namespace std;
 
-	hb_font_extents_t extents;
+hb_font_extents_t extents;
 
 vector<GlyphInfo> shapeWithHarfbuzz(const string& text, const filesystem::path& fontFilename)
 {
@@ -12,14 +12,14 @@ vector<GlyphInfo> shapeWithHarfbuzz(const string& text, const filesystem::path& 
 	auto face = hb_face_create(blob, 0);
 	auto font = hb_font_create(face);
 
-	printf("--- font units per em upem=%f\n", 1.f/ (hb_face_get_upem(face)));
+	printf("--- font units per em upem=%f\n", 1.f / (hb_face_get_upem(face)));
 
 	// if not set, we'll use design units
 	// int pixel_size = 32;  // The desired size of the font in pixels
 	// hb_font_set_scale(font, pixel_size << 6, pixel_size << 6);
-	const float scale = hb_face_get_upem(face); //64.f;
+	const float scale = hb_face_get_upem(face);  // 64.f;
 
-	float line_height = 0;//pixel_size * 1.25f;
+	float line_height = 0;  // pixel_size * 1.25f;
 	if (hb_font_get_h_extents(font, &extents))
 		line_height = (extents.ascender - extents.descender + extents.line_gap) / 64.f;
 	printf("line height from harfbuzz: %f\n", line_height);
