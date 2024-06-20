@@ -1,19 +1,13 @@
-#include <iostream>
-#include <fstream>
-#include <iostream>
+#include "Font.h"
 
 #include <ft2build.h>
-#include <freetype/freetype.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
-#include <tesselator.h>
-#include "clipper.hpp"
 
-#include "TextLayout.h"
-#include "Collection.h"
+#include <iostream>
 
 using namespace std;
-using namespace ClipperLib;
+
 
 float normalizationMul;
 
@@ -30,7 +24,7 @@ vector<vector<float2>> currentContour;
 
 float2 FT_Vector_to_float2(const FT_Vector* v)
 {
-	return float2({ v->x * normalizationMul, v->y * normalizationMul });
+	return float2(v->x, v->y) * normalizationMul;
 }
 
 
@@ -57,13 +51,7 @@ float2 cubicBezier(
 	const float2& P3,
 	double t)
 {
-	double x =
-		pow(1 - t, 3) * P0.x + 3 * pow(1 - t, 2) * t * P1.x + 3 * (1 - t) * pow(t, 2) * P2.x
-		+ pow(t, 3) * P3.x;
-	double y =
-		pow(1 - t, 3) * P0.y + 3 * pow(1 - t, 2) * t * P1.y + 3 * (1 - t) * pow(t, 2) * P2.y
-		+ pow(t, 3) * P3.y;
-	return float2({ (float)x, (float)y });
+	return bezier(t, P0, P1, P2, P3);
 }
 
 // Function to calculate the Euclidean distance between two points
@@ -121,9 +109,7 @@ int cubicTo(
 // Evaluate a quadratic Bezier curve at a given t
 float2 quadraticBezier(const float2& P0, const float2& P1, const float2& P2, double t)
 {
-	double x = (1 - t) * (1 - t) * P0.x + 2 * (1 - t) * t * P1.x + t * t * P2.x;
-	double y = (1 - t) * (1 - t) * P0.y + 2 * (1 - t) * t * P1.y + t * t * P2.y;
-	return float2({ (float)x, (float)y });
+	return (1 - t) * (1 - t) * P0 + 2 * (1 - t) * t * P1 + t * t * P2;
 }
 
 int estimateBezierSegmentsQuadratic(float2 P0, float2 P1, float2 P2, double precision)
@@ -174,8 +160,15 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 		return 1;
 	}
 
-	// Load a font face from a font file
-	error = FT_New_Face(library, filename.c_str(), 0, &face);
+	string* buffer = nullptr;
+	if (filename.extension() == ".woff2")
+	{
+		buffer = readWOFF2(filename);
+		error = FT_New_Memory_Face(library, (FT_Byte*)buffer->data(), buffer->size(), 0, &face);
+	}
+	else
+		error = FT_New_Face(library, filename.c_str(), 0, &face);
+
 	if (error == FT_Err_Unknown_File_Format)
 	{
 		cerr << "The font file could be opened and read, but it is in an unsupported format"
@@ -274,11 +267,14 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 
 	cout << "Saving..." << endl;
 
-	output.save(filename);
+	auto outfile = filename;
+	output.save(outfile.replace_extension(".bin"));
 
 	// Cleanup
 	FT_Done_Face(face);
 	FT_Done_FreeType(library);
+	if (buffer)
+		delete buffer;
 
 	currentContour.clear();
 	contours.clear();

@@ -1,16 +1,10 @@
 #pragma once
 
-#include <vector>
-#include <iostream>
-#include <fstream>
-#include <iostream>
+#include "../utils/Math.h"
+#include "../utils/File.h"
 #include <tesselator.h>
-#include "clipper.hpp"
+#include <clipper.hpp>
 
-#include "vectors.h"
-
-using namespace std;
-using namespace ClipperLib;
 
 #define OUTPUT_TRIANGLES 1
 #define APPLY_UNION 1
@@ -20,29 +14,13 @@ struct Mesh
 	int startIndex;
 	int indexCount;
 
-	Mesh(int startIndex) : startIndex(startIndex), indexCount(0)
-	{
-		//
-	}
-
-	Mesh()
-	{
-		//
-	}
+	Mesh() : startIndex(0), indexCount(0) {}
+	Mesh(int startIndex) : startIndex(startIndex), indexCount(0) {}
+	Mesh(int startIndex, int indexCount) : startIndex(startIndex), indexCount(indexCount) {}
 };
 
 class Collection
 {
-private:
-	int startVertex = 0;
-	TESStesselator* tess = nullptr;
-
-	vector<float2> vertices;
-	vector<uint32_t> indices;
-	vector<Mesh> meshes;
-
-	ClipperLib::Paths pathBuffer;
-
 public:
 	Collection()
 	{
@@ -65,7 +43,7 @@ public:
 		startVertex = (int)vertices.size();
 	}
 
-	void addPath(const vector<float2>& points)
+	void addPath(const std::vector<float2>& points)
 	{
 		ClipperLib::Path path;
 		for (const auto& p: points)
@@ -80,7 +58,7 @@ public:
 			addMesh();
 	}
 
-	void save(const filesystem::path& filename);
+	void save(const std::filesystem::path& filename);
 
 private:
 	void finishMesh()
@@ -110,7 +88,7 @@ private:
 			tess = tessNewTess(nullptr);
 			for (const auto& path: solution)
 			{
-				vector<float2> tessInput;
+				std::vector<float2> tessInput;
 				for (const auto& pt: path)
 				{
 					tessInput.push_back(
@@ -137,7 +115,7 @@ private:
 		}
 		else
 		{
-			vector<float2> points;
+			std::vector<float2> points;
 			for (const auto& path: solution)
 			{
 				points.clear();
@@ -168,36 +146,13 @@ private:
 		if (!meshes.empty())
 			meshes.back().indexCount = indices.size() - meshes.back().startIndex;
 	}
+
+	int startVertex = 0;
+	TESStesselator* tess = nullptr;
+
+	std::vector<float2> vertices;
+	std::vector<uint32_t> indices;
+	std::vector<Mesh> meshes;
+
+	ClipperLib::Paths pathBuffer;
 };
-
-template <typename T>
-void writeToFile(const filesystem::path& filename, const vector<T>& data)
-{
-	ofstream file(filename, ios::binary);
-	file.write(reinterpret_cast<const char*>(data.data()), data.size() * sizeof(T));
-}
-
-void Collection::save(const filesystem::path& filename)
-{
-	finishMesh();
-
-	auto outFile = filename;
-	outFile.replace_extension(".vert");
-	// we have to invert
-	for (auto& v: vertices)
-		v.y = 1 - v.y;
-	writeToFile(outFile, vertices);
-
-	outFile.replace_extension(".idx");
-	writeToFile(outFile, indices);
-
-	outFile.replace_extension(".mesh");
-	writeToFile(outFile, meshes);
-
-	printf(
-		"Collection '%s' with %zu meshes, %zu vertices, and %zu indices saved.\n",
-		filename.stem().c_str(),
-		meshes.size(),
-		vertices.size(),
-		indices.size());
-}
