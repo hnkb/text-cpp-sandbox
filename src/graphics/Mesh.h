@@ -7,7 +7,7 @@
 
 
 #define OUTPUT_TRIANGLES 1
-#define APPLY_UNION 0
+#define APPLY_UNION 1
 
 struct Mesh
 {

@@ -5,6 +5,9 @@ void Collection::save(const std::filesystem::path& filename)
 {
 	finishMesh();
 
+	for (auto& v: vertices)
+		v.y = 1 - v.y;
+
 	File::Pack output(filename, 'w', "FNTMSH");
 	output.add("vert", vertices, 20);
 	output.add("idx", indices, 20);
