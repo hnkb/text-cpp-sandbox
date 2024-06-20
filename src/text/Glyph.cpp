@@ -19,14 +19,15 @@ struct ContourWithIndex
 
 	bool operator==(const ContourWithIndex& rhs) const { return this->index == rhs.index; }
 };
+
 vector<ContourWithIndex> contours;
+vector<vector<float2>> currentContour;
 
 float2 FT_Vector_to_float2(const FT_Vector* v)
 {
 	return float2({ v->x * normalizationMul, v->y * normalizationMul });
 }
 
-vector<vector<float2>> currentContour;
 
 #define CURVES_PRECISION 0.01
 
@@ -274,6 +275,9 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 	// Cleanup
 	FT_Done_Face(face);
 	FT_Done_FreeType(library);
+
+    currentContour.clear();
+    contours.clear();
 
 	cout << "Saved" << endl;
 
