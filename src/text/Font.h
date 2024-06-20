@@ -23,3 +23,5 @@ std::vector<ShapedGlyph>
 	shapeWithHarfbuzz(const std::string& text, const std::filesystem::path& fontFilename);
 
 void saveFont_ttf2mesh(const std::filesystem::path& filename);
+
+std::string* readWOFF2(const std::filesystem::path& filename);

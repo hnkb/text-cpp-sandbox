@@ -9,7 +9,15 @@ using namespace std;
 void saveFont_ttf2mesh(const filesystem::path& filename)
 {
 	ttf_t* ttf = nullptr;
-	ttf_load_from_file(filename.u8string().c_str(), &ttf, false);
+	if (filename.extension() == ".woff2")
+	{
+		auto buffer = readWOFF2(filename);
+		ttf_load_from_mem((uint8_t*)buffer->c_str(), buffer->size(), &ttf, false);
+		delete buffer;
+	}
+	else
+		ttf_load_from_file(filename.u8string().c_str(), &ttf, false);
+
 	if (!ttf)
 	{
 		fprintf(stderr, "Error opening font from '%s'\n", filename.u8string().c_str());

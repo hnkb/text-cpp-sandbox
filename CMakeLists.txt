@@ -7,6 +7,7 @@ set(TARGET_NAME ${PROJECT_NAME})
 add_executable(${TARGET_NAME}
 	"src/text/Glyph_ttf2mesh.cpp"
 	"src/text/TextLayout.cpp"
+	"src/text/WOFF2.cpp"
 	"src/utils/Compression.cpp"
 	"src/main.cpp"
 )
@@ -25,4 +26,5 @@ add_subdirectory("third-party")
 target_link_libraries(${TARGET_NAME} PRIVATE
 	ttf2mesh
 	brotlienc brotlicommon
+	woff2dec woff2common
 )
