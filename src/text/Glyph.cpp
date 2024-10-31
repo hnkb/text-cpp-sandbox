@@ -69,18 +69,47 @@ double angleBetween(float2 a, float2 b)
 	return acos(dotProduct / (magnitudeA * magnitudeB));
 }
 
-// Estimator function
-int estimateBezierSegmentsCubic(float2 P0, float2 P1, float2 P2, float2 P3, double precision)
+int estimateBezierSegmentsQuadratic(float2 P0, float2 P1, float2 P2, double precision)
 {
-	double width = max({ P0.x, P1.x, P2.x, P3.x }) - min({ P0.x, P1.x, P2.x, P3.x });
-	double height = max({ P0.y, P1.y, P2.y, P3.y }) - min({ P0.y, P1.y, P2.y, P3.y });
+	double width = max({ P0.x, P1.x, P2.x }) - min({ P0.x, P1.x, P2.x });
+	double height = max({ P0.y, P1.y, P2.y }) - min({ P0.y, P1.y, P2.y });
 	double maxDimension = max(width, height);
 
 	float2 vector1 = { P1.x - P0.x, P1.y - P0.y };
-	float2 vector2 = { P3.x - P2.x, P3.y - P2.y };
+	float2 vector2 = { P2.x - P1.x, P2.y - P1.y };
 	double maxAngleDeviation = angleBetween(vector1, vector2);
 
 	return ceil((maxDimension * maxAngleDeviation) / precision);
+}
+
+float2 lerpFloat2(const float2& P0, const float2& P1, float t) {
+	float2 result;
+	result.x = lerp(P0.x, P1.x, t);
+	result.y = lerp(P0.y, P1.y, t);
+	return result;
+}
+
+static inline int
+	estimateBezierSegmentsCubic(float2 P0, float2 P1, float2 P2, float2 P3, double precision)
+{
+	// converting cubic bezier to two quadratic bezier at 0.5
+    const float t = 0.5f;
+    float2 Q0 = lerpFloat2(P0, P1, t);
+    float2 Q1 = lerpFloat2(P1, P2, t);
+    float2 Q2 = lerpFloat2(P2, P3, t);
+
+    float2 R0 = lerpFloat2(Q0, Q1, t);
+    float2 R1 = lerpFloat2(Q1, Q2, t);
+
+    float2 sharedPoint = lerpFloat2(R0, R1, t);
+
+	float2 supportPoint0 = lerpFloat2(Q0, R0, t);
+	float2 supportPoint1 = lerpFloat2(R1, Q2, t);
+
+	int result = estimateBezierSegmentsQuadratic(P0, supportPoint0, sharedPoint, precision) +
+		estimateBezierSegmentsQuadratic(sharedPoint, supportPoint1, P3, precision);
+
+	return result;
 }
 
 // Simple function to approximate a cubic Bezier curve with line segments
@@ -96,12 +125,16 @@ int cubicTo(
 	float2 P3 = FT_Vector_to_float2(to);
 
 	int segments = estimateBezierSegmentsCubic(P0, P1, P2, P3, CURVES_PRECISION);
-	for (int i = 1; i <= segments; ++i)
+
+	currentContour.back().push_back(P0);
+	// currentContour.back().push_back((P1 + P2) / 2.f);
+	for (int i = 1; i < segments; ++i)
 	{
 		double t = i / double(segments);
 		float2 pt = cubicBezier(P0, P1, P2, P3, t);
 		currentContour.back().push_back(pt);
 	}
+	currentContour.back().push_back(P3);
 
 	return 0;
 }
@@ -112,37 +145,24 @@ float2 quadraticBezier(const float2& P0, const float2& P1, const float2& P2, dou
 	return (1 - t) * (1 - t) * P0 + 2 * (1 - t) * t * P1 + t * t * P2;
 }
 
-int estimateBezierSegmentsQuadratic(float2 P0, float2 P1, float2 P2, double precision)
-{
-	double width = max({ P0.x, P1.x, P2.x }) - min({ P0.x, P1.x, P2.x });
-	double height = max({ P0.y, P1.y, P2.y }) - min({ P0.y, P1.y, P2.y });
-	double maxDimension = max(width, height);
-
-	float2 vector1 = { P1.x - P0.x, P1.y - P0.y };
-	float2 vector2 = { P2.x - P1.x, P2.y - P1.y };
-	double maxAngleDeviation = angleBetween(vector1, vector2);
-
-	return ceil((maxDimension * maxAngleDeviation) / precision);
-}
-
 // Function to flatten a quadratic Bezier curve using line segments
-int conicTo(const FT_Vector* control, const FT_Vector* to, void* user)
+int quadraticTo(const FT_Vector* control, const FT_Vector* to, void* user)
 {
 	float2 P0 = currentContour.back().back();  // Start point is the last point added
 	float2 P1 = FT_Vector_to_float2(control);  // Control point
 	float2 P2 = FT_Vector_to_float2(to);       // End point
 
-	const int segments =
-		estimateBezierSegmentsQuadratic(P0, P1, P2, CURVES_PRECISION);  // Number of line
-																		// segments to
-																		// approximate the
-																		// Bezier curve
-	for (int i = 1; i <= segments; ++i)
+	int segments = estimateBezierSegmentsQuadratic(P0, P1, P2, CURVES_PRECISION);
+
+	currentContour.back().push_back(P0);
+	// currentContour.back().push_back(P1);
+	for (int i = 1; i < segments; ++i)
 	{
 		double t = i / double(segments);
 		float2 pt = quadraticBezier(P0, P1, P2, t);
 		currentContour.back().push_back(pt);
 	}
+	currentContour.back().push_back(P2);
 
 	return 0;  // Return 0 to indicate success
 }
@@ -217,7 +237,7 @@ int saveFontUsingFreeTypeAndLibTess(const filesystem::path& filename)
 			FT_Outline_Funcs funcs;
 			funcs.move_to = moveTo;
 			funcs.line_to = lineTo;
-			funcs.conic_to = conicTo;
+			funcs.conic_to = quadraticTo;
 			funcs.cubic_to = cubicTo;
 			funcs.shift = 0;
 			funcs.delta = 0;
